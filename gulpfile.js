@@ -9,6 +9,12 @@ const del = require('del');
 const autoprefixer = require('autoprefixer');
 const cssnano = require('cssnano');
 const { argv } = require('yargs');
+const notifier = require('node-notifier');
+
+const browserify = require('browserify');
+const babelify = require('babelify');
+const buffer = require('vinyl-buffer');
+const source = require('vinyl-source-stream');
 
 const $ = gulpLoadPlugins();
 const server = browserSync.create();
@@ -39,15 +45,27 @@ function styles() {
 };
 
 function scripts() {
-  return src('app/scripts/**/*.js', {
+  const b = browserify({
+    entries: 'app/scripts/main.js',
+    transform: babelify,
+    debug: true,
     sourcemaps: !isProd,
   })
-    .pipe($.plumber())
-    .pipe($.babel())
-    .pipe(dest('.tmp/scripts', {
-      sourcemaps: !isProd ? '.' : false,
-    }))
-    .pipe(server.reload({stream: true}));
+  return b.bundle()
+    .on('error', function(err){
+      notifier.notify({
+        title: 'Compile Error',
+        message: err.message
+      });
+      this.emit('end');
+    })
+  .pipe(source('main.js'))
+  .pipe($.plumber())
+  .pipe(buffer())
+  .pipe(dest('.tmp/scripts', {
+    sourcemaps: !isProd ? '.' : false,
+  }))
+  .pipe(server.reload({stream: true}));
 };
 
 async function modernizr() {
