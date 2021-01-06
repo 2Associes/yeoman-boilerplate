@@ -35,7 +35,7 @@ module.exports = () => through2.obj(function (file, _, cb) {
       compiledHTML = handlebarsCompile(file.contents.toString())
     } catch (error) {
       // Report error without breaking dev server
-      return cb(new PluginError('Handlebars', 'Error found in ' + file.path + '\n' + error.message), null);
+      return cb(new PluginError('Handlebars', 'Error found in ' + file.path + '\n' + error.message), null)
     }
 
     file.contents = Buffer.from(compiledHTML)
@@ -44,5 +44,5 @@ module.exports = () => through2.obj(function (file, _, cb) {
     file.path = file.path.replace(/\.[^.]*$/, '.html')
   }
 
-  cb(null, file);
+  cb(null, file)
 })

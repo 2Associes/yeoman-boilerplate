@@ -61,8 +61,7 @@ const lintBase = (files, options) => {
     .pipe($.if(!server.active, $.eslint.failAfterError()));
 }
 function lint() {
-  return lintBase('app/scripts/**/*.js', { fix: true })
-    .pipe(dest('app/scripts'));
+  return lintBase('app/scripts/**/*.js');
 };
 
 // Generate html with Handlebars
@@ -178,5 +177,6 @@ if (isDev) {
 }
 
 exports.serve = serve;
+exports.lint = lint;
 exports.build = build;
 exports.default = build;
