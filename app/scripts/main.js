@@ -1,5 +1,3 @@
-import { Home } from './pages/home'
+import foo from './foo'
 
-const home = new Home()
-
-home.init()
+foo()

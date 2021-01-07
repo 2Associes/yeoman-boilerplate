@@ -1,20 +1,12 @@
-// generated on 2020-12-31 using generator-webapp 4.0.0-8
 const { src, dest, watch, series, parallel, lastRun } = require('gulp');
 const gulpLoadPlugins = require('gulp-load-plugins');
-const fs = require('fs');
-const mkdirp = require('mkdirp');
-const Modernizr = require('modernizr');
 const browserSync = require('browser-sync');
 const del = require('del');
 const autoprefixer = require('autoprefixer');
 const cssnano = require('cssnano');
 const { argv } = require('yargs');
-const notifier = require('node-notifier');
-
-const browserify = require('browserify');
-const babelify = require('babelify');
-const buffer = require('vinyl-buffer');
-const source = require('vinyl-source-stream');
+const babelify = require('babelify')
+const handlebars = require('./app/templates/handlebars')
 
 const $ = gulpLoadPlugins();
 const server = browserSync.create();
@@ -22,8 +14,7 @@ const server = browserSync.create();
 const port = argv.port || 9000;
 
 const isProd = process.env.NODE_ENV === 'production';
-const isTest = process.env.NODE_ENV === 'test';
-const isDev = !isProd && !isTest;
+const isDev = !isProd;
 
 function styles() {
   return src('app/styles/*.scss', {
@@ -45,57 +36,22 @@ function styles() {
 };
 
 function scripts() {
-  const b = browserify({
-    entries: 'app/scripts/main.js',
-    transform: babelify,
-    debug: true,
+  return src('app/scripts/main.js', {
     sourcemaps: !isProd,
   })
-  return b.bundle()
-    .on('error', function(err){
-      notifier.notify({
-        title: 'Compile Error',
-        message: err.message
-      });
-      this.emit('end');
-    })
-  .pipe(source('main.js'))
-  .pipe($.plumber())
-  .pipe(buffer())
-  .pipe(dest('.tmp/scripts', {
-    sourcemaps: !isProd ? '.' : false,
-  }))
-  .pipe(server.reload({stream: true}));
+    .pipe($.plumber())
+    // Enable ES Modules with Browserify
+    .pipe($.bro({
+      transform: [
+        babelify.configure()
+      ]
+    }))
+    .pipe(dest('.tmp/scripts', {
+      sourcemaps: !isProd ? '.' : false,
+    }))
+    .pipe(server.reload({stream: true}));
 };
 
-async function modernizr() {
-  const readConfig = () => new Promise((resolve, reject) => {
-    fs.readFile(`${__dirname}/modernizr.json`, 'utf8', (err, data) => {
-      if (err) reject(err);
-      resolve(JSON.parse(data));
-    })
-  })
-  const createDir = () => new Promise((resolve, reject) => {
-    mkdirp(`${__dirname}/.tmp/scripts`, err => {
-      if (err) reject(err);
-      resolve();
-    })
-  });
-  const generateScript = config => new Promise((resolve, reject) => {
-    Modernizr.build(config, content => {
-      fs.writeFile(`${__dirname}/.tmp/scripts/modernizr.js`, content, err => {
-        if (err) reject(err);
-        resolve(content);
-      });
-    })
-  });
-
-  const [config] = await Promise.all([
-    readConfig(),
-    createDir()
-  ]);
-  await generateScript(config);
-}
 
 const lintBase = (files, options) => {
   return src(files)
@@ -105,15 +61,20 @@ const lintBase = (files, options) => {
     .pipe($.if(!server.active, $.eslint.failAfterError()));
 }
 function lint() {
-  return lintBase('app/scripts/**/*.js', { fix: true })
-    .pipe(dest('app/scripts'));
-};
-function lintTest() {
-  return lintBase('test/spec/**/*.js');
+  return lintBase('app/scripts/**/*.js');
 };
 
+// Generate html with Handlebars
+function templates() {
+  return src('app/templates/pages/**/*.hbs')
+    .pipe($.plumber())
+    .pipe(handlebars())
+    .pipe(dest('.tmp'))
+    .pipe(server.reload({stream: true}));
+}
+
 function html() {
-  return src('app/*.html')
+  return src('.tmp/**/*.html')
     .pipe($.useref({searchPath: ['.tmp', 'app', '.']}))
     .pipe($.if(/\.js$/, $.uglify({compress: {drop_console: true}})))
     .pipe($.if(/\.css$/, $.postcss([cssnano({safe: true, autoprefixer: false})])))
@@ -163,7 +124,7 @@ const build = series(
   clean,
   parallel(
     lint,
-    series(parallel(styles, scripts, modernizr), html),
+    series(parallel(styles, scripts, templates), html),
     images,
     fonts,
     extras
@@ -189,29 +150,10 @@ function startAppServer() {
     '.tmp/fonts/**/*'
   ]).on('change', server.reload);
 
+  watch('app/templates/**/*', templates);
   watch('app/styles/**/*.scss', styles);
   watch('app/scripts/**/*.js', scripts);
-  watch('modernizr.json', modernizr);
   watch('app/fonts/**/*', fonts);
-}
-
-function startTestServer() {
-  server.init({
-    notify: false,
-    port,
-    ui: false,
-    server: {
-      baseDir: 'test',
-      routes: {
-        '/scripts': '.tmp/scripts',
-        '/node_modules': 'node_modules'
-      }
-    }
-  });
-
-  watch('test/index.html').on('change', server.reload);
-  watch('app/scripts/**/*.js', scripts);
-  watch('test/spec/**/*.js', lintTest);
 }
 
 function startDistServer() {
@@ -229,13 +171,12 @@ function startDistServer() {
 
 let serve;
 if (isDev) {
-  serve = series(clean, parallel(styles, scripts, modernizr, fonts), startAppServer);
-} else if (isTest) {
-  serve = series(clean, scripts, startTestServer);
+  serve = series(clean, parallel(styles, scripts, fonts, templates), startAppServer);
 } else if (isProd) {
   serve = series(build, startDistServer);
 }
 
 exports.serve = serve;
+exports.lint = lint;
 exports.build = build;
 exports.default = build;
