@@ -1,6 +1,11 @@
-node_modules/
-bower_components/
-*.log
+# dependencies
+node_modules
+bower_components
 
-build/
-dist/
+# compiled output
+/dist
+/.tmp
+
+# System Files
+.DS_Store
+Thumbs.db
